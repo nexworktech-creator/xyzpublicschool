@@ -1,0 +1,146 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+const CLASS_OPTIONS = [
+  "Nursery", "LKG", "UKG",
+  "Class 1", "Class 2", "Class 3", "Class 4", "Class 5",
+  "Class 6", "Class 7", "Class 8", "Class 9", "Class 10", "Class 11", "Class 12",
+];
+
+const blankSubject = () => ({
+  subject: "",
+  isNonAcademic: false,
+  components: [{ name: "PA-1", maxMarks: 15 }, { name: "Notebook/Copy", maxMarks: 5 }, { name: "Half-Yearly Exam", maxMarks: 80 }],
+  gradingOptions: ["A+", "B+", "C+"],
+});
+
+export default function ExamConfigForm() {
+  const [academicYear, setAcademicYear] = useState("2026-27");
+  const [className, setClassName] = useState(CLASS_OPTIONS[3]);
+  const [subjects, setSubjects] = useState([blankSubject()]);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    fetch(`/api/exam-config?academicYear=${academicYear}&className=${encodeURIComponent(className)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const existing = d.examConfigs?.[0];
+        setSubjects(existing?.subjects?.length ? existing.subjects : [blankSubject()]);
+      });
+  }, [academicYear, className]);
+
+  function updateSubject(i, patch) {
+    setSubjects((s) => s.map((sub, idx) => (idx === i ? { ...sub, ...patch } : sub)));
+  }
+  function updateComponent(i, ci, patch) {
+    setSubjects((s) =>
+      s.map((sub, idx) =>
+        idx === i ? { ...sub, components: sub.components.map((c, cidx) => (cidx === ci ? { ...c, ...patch } : c)) } : sub
+      )
+    );
+  }
+  function addComponent(i) {
+    setSubjects((s) => s.map((sub, idx) => (idx === i ? { ...sub, components: [...sub.components, { name: "", maxMarks: 0 }] } : sub)));
+  }
+  function removeComponent(i, ci) {
+    setSubjects((s) => s.map((sub, idx) => (idx === i ? { ...sub, components: sub.components.filter((_, cidx) => cidx !== ci) } : sub)));
+  }
+  function updateGradingOptions(i, text) {
+    updateSubject(i, { gradingOptions: text.split(",").map((g) => g.trim()).filter(Boolean) });
+  }
+  function addSubject() {
+    setSubjects((s) => [...s, blankSubject()]);
+  }
+  function removeSubject(i) {
+    setSubjects((s) => s.filter((_, idx) => idx !== i));
+  }
+
+  async function save() {
+    setSaving(true);
+    setMessage("");
+    try {
+      const res = await fetch("/api/exam-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ academicYear, className, subjects }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || "Could not save");
+      setMessage("Saved.");
+    } catch (err) {
+      setMessage(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4 rounded-sm border border-navy-100 bg-white p-5">
+      <div className="flex flex-wrap gap-3">
+        <input value={academicYear} onChange={(e) => setAcademicYear(e.target.value)}
+          placeholder="Academic year e.g. 2026-27"
+          className="rounded-sm border border-navy-100 px-3 py-1.5 text-sm" />
+        <select value={className} onChange={(e) => setClassName(e.target.value)}
+          className="rounded-sm border border-navy-100 px-3 py-1.5 text-sm">
+          {CLASS_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+
+      {subjects.map((sub, i) => (
+        <div key={i} className="rounded-sm border border-navy-100 p-4">
+          <div className="flex items-center gap-3">
+            <input placeholder="Subject name" value={sub.subject}
+              onChange={(e) => updateSubject(i, { subject: e.target.value })}
+              className="flex-1 rounded-sm border border-navy-100 px-3 py-1.5 text-sm" />
+            <label className="flex items-center gap-1.5 text-xs text-navy-600">
+              <input type="checkbox" checked={sub.isNonAcademic}
+                onChange={(e) => updateSubject(i, { isNonAcademic: e.target.checked })} />
+              Non-academic (grade only)
+            </label>
+            <button onClick={() => removeSubject(i)} className="text-maroon">&times;</button>
+          </div>
+
+          {sub.isNonAcademic ? (
+            <div className="mt-3">
+              <label className="mb-1 block text-xs text-navy-400">Grading options (comma separated)</label>
+              <input value={sub.gradingOptions.join(", ")}
+                onChange={(e) => updateGradingOptions(i, e.target.value)}
+                placeholder="A+, B+, C+"
+                className="w-full rounded-sm border border-navy-100 px-3 py-1.5 text-sm" />
+            </div>
+          ) : (
+            <div className="mt-3 space-y-2">
+              <label className="mb-1 block text-xs text-navy-400">Mark distribution</label>
+              {sub.components.map((c, ci) => (
+                <div key={ci} className="flex items-center gap-2">
+                  <input placeholder="Component (e.g. PA-1)" value={c.name}
+                    onChange={(e) => updateComponent(i, ci, { name: e.target.value })}
+                    className="flex-1 rounded-sm border border-navy-100 px-3 py-1.5 text-sm" />
+                  <input type="number" placeholder="Marks" value={c.maxMarks}
+                    onChange={(e) => updateComponent(i, ci, { maxMarks: Number(e.target.value) })}
+                    className="w-24 rounded-sm border border-navy-100 px-3 py-1.5 text-sm" />
+                  <button onClick={() => removeComponent(i, ci)} className="text-navy-400 hover:text-maroon">&times;</button>
+                </div>
+              ))}
+              <button onClick={() => addComponent(i)} className="text-xs text-brass-600 hover:underline">+ Add component</button>
+              <p className="text-xs text-navy-400">
+                Total: {sub.components.reduce((s, c) => s + Number(c.maxMarks || 0), 0)} marks
+              </p>
+            </div>
+          )}
+        </div>
+      ))}
+
+      <button onClick={addSubject} className="text-sm text-brass-600 hover:underline">+ Add subject</button>
+
+      <div className="flex items-center gap-3">
+        <button onClick={save} disabled={saving}
+          className="rounded-sm bg-navy px-5 py-2 text-sm text-ivory hover:bg-navy-600 disabled:opacity-50">
+          {saving ? "Saving..." : "Save exam configuration"}
+        </button>
+        {message && <span className="text-sm text-navy-600">{message}</span>}
+      </div>
+    </div>
+  );
+}
