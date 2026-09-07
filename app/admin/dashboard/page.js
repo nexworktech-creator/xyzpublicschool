@@ -13,6 +13,7 @@ const MODULES = [
   { href: "/admin/students", title: "Students & Attendance", desc: "Class-wise student list with live daily attendance status." },
   { href: "/admin/results", title: "Results & Grading", desc: "Review class-wise results, ranks and grade scales." },
   { href: "/admin/exam-config", title: "Exam Configuration & Grading", desc: "Mark distributions, custom grading scale and report-card layout." },
+  { href: "/admin/result-template", title: "Result Template Selection", desc: "Pick one of 10 report-card designs and set the school's name, logo and board." },
   { href: "/admin/fees", title: "Fee Defaults", desc: "See students with overdue installments across the school." },
   { href: "/admin/copy-audit", title: "Copy Unchecked Audit", desc: "Flag notebooks that haven't been checked yet, by class." },
   { href: "/admin/teacher-attendance", title: "Teacher Attendance & Logs", desc: "Daily check-in/check-out logs, with monthly Excel export." },

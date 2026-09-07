@@ -12,6 +12,15 @@ const SchoolSettingsSchema = new mongoose.Schema(
     // and still be permitted to punch in/out. Admin-configurable, 100–1000m.
     radiusMeters: { type: Number, default: 200, min: 100, max: 1000 },
     address: { type: String },
+    // --- Branding used on printed/downloaded result report cards ---------
+    schoolName: { type: String, default: "XYZ Public School" },
+    phone: { type: String },
+    affiliation: { type: String }, // e.g. "CBSE Affiliation No. 123456"
+    logoUrl: { type: String },
+    logoPublicId: { type: String },
+    // Which of the 10 built-in report-card designs (see lib/resultTemplates.js)
+    // Admin has chosen as the one used for every printed/downloaded result.
+    selectedTemplateId: { type: String, default: "classic-navy" },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
