@@ -1,7 +1,62 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Image from "next/image";
 
 function formatDate(d) {
   return new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
+// Cycles through every media item (images + a video embed) for one event
+// card — the "4-6 photos + video, auto-playing in one card" slideshow.
+function EventMedia({ heading, category, media = [] }) {
+  const items = media.length ? media : null;
+  const [active, setActive] = useState(0);
+
+  useEffect(() => {
+    if (!items || items.length < 2) return undefined;
+    const current = items[active];
+    // Pause auto-advance while a video embed is showing — let it play;
+    // only images advance on a timer.
+    if (current?.isEmbed) return undefined;
+    const timer = setTimeout(() => setActive((i) => (i + 1) % items.length), 3200);
+    return () => clearTimeout(timer);
+  }, [active, items]);
+
+  if (!items) {
+    return (
+      <div className="flex h-full w-full items-center justify-center font-display text-sm text-navy-400">
+        {category}
+      </div>
+    );
+  }
+
+  const current = items[active];
+
+  return (
+    <>
+      {current.isEmbed ? (
+        <iframe src={current.url} title={heading} className="h-full w-full" allowFullScreen />
+      ) : (
+        <Image src={current.url} alt={heading} fill className="object-cover" />
+      )}
+      {items.length > 1 && (
+        <div className="absolute inset-x-0 bottom-2 flex justify-center gap-1.5">
+          {items.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setActive(i)}
+              aria-label={`Show media ${i + 1}`}
+              className={`h-1.5 w-1.5 rounded-full transition-colors ${
+                i === active ? "bg-brass" : "bg-white/60"
+              }`}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
 }
 
 export default function EventsGallery({ events = [] }) {
@@ -15,27 +70,13 @@ export default function EventsGallery({ events = [] }) {
 
         <div className="mt-10 flex snap-x snap-mandatory gap-5 overflow-x-auto pb-4">
           {list.map((ev, idx) => {
-            const cover = ev.media?.[0];
             return (
               <article
                 key={ev._id || idx}
                 className="w-[280px] shrink-0 snap-start rounded-sm border border-navy-100 bg-white sm:w-[340px]"
               >
                 <div className="relative aspect-video w-full overflow-hidden bg-navy-50">
-                  {cover?.isEmbed ? (
-                    <iframe
-                      src={cover.url}
-                      title={ev.heading}
-                      className="h-full w-full"
-                      allowFullScreen
-                    />
-                  ) : cover?.url ? (
-                    <Image src={cover.url} alt={ev.heading} fill className="object-cover" />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center font-display text-sm text-navy-400">
-                      {ev.category}
-                    </div>
-                  )}
+                  <EventMedia heading={ev.heading} category={ev.category} media={ev.media} />
                 </div>
                 <div className="p-4">
                   <p className="text-[11px] uppercase tracking-wide text-brass-600">

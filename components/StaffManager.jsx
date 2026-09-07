@@ -31,6 +31,7 @@ export default function StaffManager() {
 
   // --- Face capture ------------------------------------------------------
   const videoRef = useRef(null);
+  const streamRef = useRef(null);
   const [camOn, setCamOn] = useState(false);
   const [faceImage, setFaceImage] = useState(null); // data URL snapshot
   const [faceDescriptor, setFaceDescriptor] = useState(null); // 128-d array used for matching
@@ -44,17 +45,32 @@ export default function StaffManager() {
 
   async function startCamera() {
     try {
+      setError("");
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      if (videoRef.current) videoRef.current.srcObject = stream;
+      // The <video> element only mounts once camOn flips true (it's behind a
+      // conditional render below), so videoRef.current is still null right
+      // here — assigning srcObject at this point silently does nothing and
+      // the camera panel looks "stuck" with a blank/black box. Stash the
+      // stream and attach it in the effect below, once the element exists.
+      streamRef.current = stream;
       setCamOn(true);
     } catch {
       setError("Could not access camera. Check browser permissions.");
     }
   }
 
+  // Attach the pending stream to the <video> element as soon as it mounts.
+  useEffect(() => {
+    if (camOn && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play?.().catch(() => {});
+    }
+  }, [camOn]);
+
   function stopCamera() {
-    const stream = videoRef.current?.srcObject;
+    const stream = streamRef.current || videoRef.current?.srcObject;
     stream?.getTracks()?.forEach((t) => t.stop());
+    streamRef.current = null;
     setCamOn(false);
   }
 

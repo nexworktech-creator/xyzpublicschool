@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 const emptyForm = { heading: "", description: "", eventDate: "", category: "other", embedUrl: "" };
+const MAX_PHOTOS = 6;
 
 function fileToDataUri(file) {
   return new Promise((resolve, reject) => {
@@ -16,9 +17,21 @@ function fileToDataUri(file) {
 export default function EventManager() {
   const [events, setEvents] = useState([]);
   const [form, setForm] = useState(emptyForm);
-  const [photoFile, setPhotoFile] = useState(null);
+  // Up to MAX_PHOTOS images per event — they'll auto-rotate as a slideshow
+  // on the public Activities & Events card, alongside the video (if any).
+  const [photoFiles, setPhotoFiles] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  function handlePhotoPick(fileList) {
+    const picked = Array.from(fileList || []).slice(0, MAX_PHOTOS);
+    if (fileList && fileList.length > MAX_PHOTOS) {
+      setError(`Only the first ${MAX_PHOTOS} photos were kept — that's the max per event.`);
+    } else {
+      setError("");
+    }
+    setPhotoFiles(picked);
+  }
 
   function load() {
     fetch("/api/events").then((r) => r.json()).then((d) => setEvents(d.events || []));
@@ -31,8 +44,8 @@ export default function EventManager() {
     setError("");
     try {
       const mediaItems = [];
-      if (photoFile) {
-        mediaItems.push({ type: "image", photoDataUri: await fileToDataUri(photoFile) });
+      for (const file of photoFiles) {
+        mediaItems.push({ type: "image", photoDataUri: await fileToDataUri(file) });
       }
       if (form.embedUrl) {
         mediaItems.push({ type: "video", isEmbed: true, url: form.embedUrl });
@@ -52,7 +65,7 @@ export default function EventManager() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save");
       setForm(emptyForm);
-      setPhotoFile(null);
+      setPhotoFiles([]);
       load();
     } catch (err) {
       setError(err.message);
@@ -82,8 +95,15 @@ export default function EventManager() {
             ))}
           </select>
         </div>
-        <input type="file" accept="image/*" onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
-          className="w-full text-sm" />
+        <div>
+          <input type="file" accept="image/*" multiple
+            onChange={(e) => handlePhotoPick(e.target.files)}
+            className="w-full text-sm" />
+          <p className="mt-1 text-xs text-navy-400">
+            Pick up to {MAX_PHOTOS} photos — they auto-play as a slideshow on the public card.
+            {photoFiles.length > 0 && ` ${photoFiles.length} selected.`}
+          </p>
+        </div>
         <input placeholder="Or paste a video embed URL (YouTube, etc.)" value={form.embedUrl}
           onChange={(e) => setForm({ ...form, embedUrl: e.target.value })}
           className="w-full rounded-sm border border-navy-100 px-3 py-2 text-sm" />

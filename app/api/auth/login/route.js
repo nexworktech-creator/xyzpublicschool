@@ -4,12 +4,13 @@ import { verifyPassword, verifyPin, signToken } from "@/lib/auth";
 
 // POST /api/auth/login
 //   body (password login): { email, password, portal: "admin" | "teacher" }
-//   body (PIN login, admin portal only): { pin, portal: "admin" }
+//   body (PIN login, admin or teacher portal): { pin, portal: "admin" | "teacher" }
 // `portal` restricts which role is allowed to sign in from that login page,
 // so a teacher account can't be used on the Admin Login screen and vice versa.
 //
 // Default credentials: on first seed, the Admin/Principal account's PIN and
-// password are both "12345" — see scripts/seed.js.
+// password are both "12345" — see scripts/seed.js. Teachers get their own
+// PIN (set by Admin from Staff Accounts) for quick sign-in the same way.
 export async function POST(req) {
   try {
     const { email, password, pin, portal } = await req.json();
@@ -20,15 +21,17 @@ export async function POST(req) {
 
     await connectDB();
 
-    // --- PIN login (admin portal only) ---------------------------------
+    // --- PIN login (admin or teacher portal) ----------------------------
     if (pin) {
-      if (portal !== "admin") {
-        return Response.json({ error: "PIN login is only available for the Admin portal" }, { status: 403 });
+      const pinRoles =
+        portal === "admin" ? ["superadmin", "admin"] : portal === "teacher" ? ["teacher"] : null;
+      if (!pinRoles) {
+        return Response.json({ error: "PIN login is only available for the Admin and Teacher portals" }, { status: 403 });
       }
       const candidates = await User.find({
         active: true,
         deletedAt: null,
-        role: { $in: ["superadmin", "admin"] },
+        role: { $in: pinRoles },
         pinHash: { $exists: true, $ne: null },
       });
       let matched = null;
@@ -44,7 +47,15 @@ export async function POST(req) {
       }
       matched.lastLoginAt = new Date();
       await matched.save();
-      const token = signToken({ sub: matched._id.toString(), role: matched.role, name: matched.name });
+      const token = signToken({
+        sub: matched._id.toString(),
+        role: matched.role,
+        name: matched.name,
+        // Same as the password-login path below — needed so CT / Subject
+        // Teacher-only screens still unlock correctly after a PIN sign-in.
+        classTeacherOf: matched.classTeacherOf || null,
+        subjectAssignments: matched.subjectAssignments || [],
+      });
       const res = Response.json({
         user: { id: matched._id, name: matched.name, email: matched.email, role: matched.role },
       });

@@ -39,7 +39,7 @@ export default function LoginForm({ portal, redirectTo, title, subtitle }) {
       <h1 className="mt-1 font-display text-3xl text-navy">{title}</h1>
       <p className="mt-2 text-sm text-navy-600">{subtitle}</p>
 
-      {portal === "admin" && (
+      {(portal === "admin" || portal === "teacher") && (
         <div className="mt-6 flex gap-2 text-xs">
           <button type="button" onClick={() => setMode("password")}
             className={`rounded-sm border px-3 py-1.5 ${mode === "password" ? "border-brass bg-brass-50 text-navy" : "border-navy-100 text-navy-400"}`}>
@@ -55,14 +55,16 @@ export default function LoginForm({ portal, redirectTo, title, subtitle }) {
       <form onSubmit={handleSubmit} className="mt-4 space-y-4 rounded-sm border border-navy-100 bg-white p-6 shadow-plaque">
         {mode === "pin" ? (
           <div>
-            <label htmlFor="pin" className="mb-1 block text-sm text-navy-600">Admin PIN</label>
+            <label htmlFor="pin" className="mb-1 block text-sm text-navy-600">
+              {portal === "teacher" ? "Teacher PIN" : "Admin PIN"}
+            </label>
             <input
               id="pin"
               type="password"
               inputMode="numeric"
               required
               autoComplete="off"
-              placeholder="Default: 12345"
+              placeholder={portal === "teacher" ? "Ask Admin to set your PIN" : "Default: 12345"}
               value={pin}
               onChange={(e) => setPin(e.target.value)}
               className="w-full rounded-sm border border-navy-100 px-3 py-2 text-sm tracking-widest focus:border-brass"
