@@ -16,7 +16,7 @@ const MODULES = [
 const CT_MODULES = [
   { href: "/teacher/students", title: "Class Roster", desc: "Add new students to your class and view the complete roster." },
   { href: "/teacher/attendance-sheet", title: "Attendance Sheet", desc: "Monthly P/A grid for your class, with a Download Excel button." },
-  { href: "/teacher/report-cards", title: "Report Cards", desc: "Generate an official Report Card PDF for any student in your class." },
+  { href: "/teacher/report-cards", title: "Make Result / Report Cards", desc: "See every subject for your whole class in one sheet, fill in your own subject, then generate each student's Report Card PDF." },
 ];
 
 export default function TeacherDashboardPage() {

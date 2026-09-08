@@ -22,6 +22,7 @@ export default function EventManager() {
   const [photoFiles, setPhotoFiles] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [deletingId, setDeletingId] = useState(null);
 
   function handlePhotoPick(fileList) {
     const picked = Array.from(fileList || []).slice(0, MAX_PHOTOS);
@@ -74,6 +75,21 @@ export default function EventManager() {
     }
   }
 
+  async function handleDelete(id) {
+    if (!confirm("Remove this event/activity from the public gallery? This cannot be undone.")) return;
+    setDeletingId(id);
+    setError("");
+    try {
+      const res = await fetch(`/api/events/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json()).error || "Could not delete event");
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <div className="grid gap-8 md:grid-cols-2">
       <form onSubmit={handleSubmit} className="space-y-3 rounded-sm border border-navy-100 bg-white p-5">
@@ -118,11 +134,17 @@ export default function EventManager() {
         <h2 className="font-display text-lg text-navy">Published events</h2>
         <ul className="mt-3 space-y-2">
           {events.map((ev) => (
-            <li key={ev._id} className="rounded-sm border border-navy-100 bg-white px-4 py-2 text-sm">
-              <p className="text-navy">{ev.heading}</p>
-              <p className="text-xs text-navy-400">
-                {new Date(ev.eventDate).toLocaleDateString("en-IN")} &middot; {ev.category}
-              </p>
+            <li key={ev._id} className="flex items-start justify-between gap-3 rounded-sm border border-navy-100 bg-white px-4 py-2 text-sm">
+              <div>
+                <p className="text-navy">{ev.heading}</p>
+                <p className="text-xs text-navy-400">
+                  {new Date(ev.eventDate).toLocaleDateString("en-IN")} &middot; {ev.category}
+                </p>
+              </div>
+              <button type="button" onClick={() => handleDelete(ev._id)} disabled={deletingId === ev._id}
+                className="shrink-0 text-xs text-maroon hover:underline disabled:opacity-50">
+                {deletingId === ev._id ? "Deleting..." : "Delete"}
+              </button>
             </li>
           ))}
           {!events.length && <p className="text-sm text-navy-400">No events published yet.</p>}

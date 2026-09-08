@@ -24,11 +24,14 @@ export default function TeacherReportCardsPage() {
       ) : (
         <>
           <p className="mt-1 text-sm text-navy-600">
-            Generate an official report card PDF — attendance %, subject marks and grade — for any student
-            in {session.classTeacherOf}.
+            See every subject for every student in {session.classTeacherOf} in one sheet — roll no, name,
+            each subject&apos;s marks (theory/practical/notebook, or grade for non-academic subjects like
+            Drawing). Columns for your own subject(s) are editable; every other subject is read-only,
+            filled in by the respective Subject Teacher. Once everything is filled in, generate the
+            official report card PDF from a student&apos;s row.
           </p>
           <div className="mt-8">
-            <CTReportCards classTeacherOf={session.classTeacherOf} />
+            <CTReportCards classTeacherOf={session.classTeacherOf} subjectAssignments={session.subjectAssignments || []} />
           </div>
         </>
       )}

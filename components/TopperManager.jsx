@@ -19,6 +19,7 @@ export default function TopperManager() {
   const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [deletingId, setDeletingId] = useState(null);
 
   function load() {
     fetch("/api/toppers").then((r) => r.json()).then((d) => setToppers(d.toppers || []));
@@ -52,6 +53,21 @@ export default function TopperManager() {
       setError(err.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDelete(id) {
+    if (!confirm("Remove this topper from the Topper's Corner? This cannot be undone.")) return;
+    setDeletingId(id);
+    setError("");
+    try {
+      const res = await fetch(`/api/toppers/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json()).error || "Could not delete topper");
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -91,7 +107,13 @@ export default function TopperManager() {
           {toppers.map((t) => (
             <li key={t._id} className="flex items-center justify-between rounded-sm border border-navy-100 bg-white px-4 py-2 text-sm">
               <span>{t.studentName} &middot; {t.className}</span>
-              <span className="text-navy-400">#{t.rank} &middot; {t.percentage}%</span>
+              <div className="flex items-center gap-3">
+                <span className="text-navy-400">#{t.rank} &middot; {t.percentage}%</span>
+                <button type="button" onClick={() => handleDelete(t._id)} disabled={deletingId === t._id}
+                  className="text-xs text-maroon hover:underline disabled:opacity-50">
+                  {deletingId === t._id ? "Deleting..." : "Delete"}
+                </button>
+              </div>
             </li>
           ))}
           {!toppers.length && <p className="text-sm text-navy-400">No toppers added yet.</p>}
