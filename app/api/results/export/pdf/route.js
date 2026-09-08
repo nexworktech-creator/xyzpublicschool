@@ -160,6 +160,174 @@ const TABLE_DRAWERS = {
   },
 };
 
+// Fallback grading legend for the Official Marksheet footer, used only when
+// the result's grade scale has no bands configured (or none is linked).
+// Mirrors the standard CBSE-style A1..E2 note.
+const DEFAULT_GRADING_LEGEND =
+  "A1=Outstanding(91%-100%), A2=Excellent(81%-90%), B1=Very Good(71%-80%), B2=Good(61%-70%), " +
+  "C1=Satisfactory(51%-60%), C2=Average(41%-50%), D=Eligible for Qualifying(33%-40%), " +
+  "E1=Eligible for improvement of performance(21%-32%), E2=Eligible for improvement of performance(20% and below).";
+
+// --- Official Marksheet layout (CBSE-style "Statement of Marks") ----------
+// A dedicated full-page layout matching a traditional printed mark-sheet:
+// contact/affiliation line, centered school name + "CLASS - X" + "Statements
+// of Marks <year>", a student-details block, a SCHOLASTIC AREA table with
+// one column per exam-config component (Per test, Notebook, Half-Yearly,
+// etc. — pulled from whichever subject on this result has a component
+// breakdown), an Overall Marks / Percentage / Grade strip, remarks/result
+// lines, a three-way Date / Class Teacher / Parent signature row, and a
+// grading-scale legend footer. Kept separate from HEADER_DRAWERS/
+// TABLE_DRAWERS above since its structure (spanning header cells, dynamic
+// component columns, footer legend) doesn't fit that generic shape.
+function drawOfficialMarksheet(doc, { result, school, cfg, attendancePct }) {
+  const black = "#000000";
+  const font = "Times-Roman";
+  const boldFont = "Times-Bold";
+
+  // --- Top contact/affiliation line + title block --------------------------
+  doc.font(font).fontSize(9).fillColor(black);
+  if (school.phone) doc.text(`Contact No. ${school.phone}`, PAGE_LEFT, 42, { width: 250 });
+  if (school.affiliation) {
+    doc.text(`Affiliation No. ${school.affiliation}`, PAGE_LEFT, 42, { width: PAGE_WIDTH, align: "right" });
+  }
+  doc.font(boldFont).fontSize(20).text(school.schoolName.toUpperCase(), 0, 60, { align: "center" });
+  doc.font(font).fontSize(11).text(`CLASS - ${result.className}`, 0, 86, { align: "center" });
+  doc.font(boldFont).fontSize(10).text(`Statements of Marks ${result.academicYear}`, 0, 102, { align: "center" });
+  doc.moveTo(PAGE_LEFT, 120).lineTo(PAGE_RIGHT, 120).strokeColor(black).lineWidth(0.8).stroke();
+
+  // --- Student details block -----------------------------------------------
+  let y = 132;
+  doc.font(font).fontSize(10).fillColor(black);
+  const detailLine = (label, value) => {
+    doc.text(`${label} :  ${value ?? "-"}`, PAGE_LEFT, y);
+    y += 15;
+  };
+  detailLine("Admission No", result.student?.admissionNumber);
+  detailLine("Student's Name", result.student?.name);
+  detailLine("Father's Name", result.student?.fatherName);
+  detailLine("D.O.B", result.student?.dob ? new Date(result.student.dob).toLocaleDateString("en-GB") : null);
+  detailLine("Class", `${result.className}${result.section ? " - " + result.section : ""}`);
+  if (cfg.showOverallAttendance) {
+    detailLine("Attendance", attendancePct != null ? `${attendancePct}%` : "No attendance on record");
+  }
+  y += 4;
+
+  // --- Marks table: column set comes from whichever subject has a
+  // component breakdown (Admin's exam-config for this class); subjects
+  // without one (non-academic / gradeOnly) render "-" across those columns.
+  const withComponents = result.subjects.find((s) => s.components?.length);
+  const componentDefs = withComponents ? withComponents.components : [];
+  const subjectColW = 130;
+  const totalColW = 70;
+  const gradeColW = 50;
+  const compAreaW = PAGE_WIDTH - subjectColW - totalColW - gradeColW;
+  const compColW = componentDefs.length ? compAreaW / componentDefs.length : compAreaW;
+  const tableRight = PAGE_LEFT + subjectColW + compAreaW + totalColW + gradeColW;
+  const totalColX = PAGE_LEFT + subjectColW + compAreaW;
+  const gradeColX = totalColX + totalColW;
+
+  const headRow1Y = y;
+  const headH = 34;
+  doc.rect(PAGE_LEFT, headRow1Y, tableRight - PAGE_LEFT, headH).strokeColor(black).lineWidth(0.8).stroke();
+  doc.moveTo(PAGE_LEFT + subjectColW, headRow1Y).lineTo(PAGE_LEFT + subjectColW, headRow1Y + headH).stroke();
+  doc.font(boldFont).fontSize(8).text("SCHOLASTIC\nAREA", PAGE_LEFT + 4, headRow1Y + 4, { width: subjectColW - 8 });
+  doc.font(boldFont).fontSize(9).text(
+    (result.examName || "EXAM").toUpperCase(),
+    PAGE_LEFT + subjectColW,
+    headRow1Y + 4,
+    { width: tableRight - (PAGE_LEFT + subjectColW), align: "center" }
+  );
+  const headRow2Y = headRow1Y + 16;
+  doc.moveTo(PAGE_LEFT + subjectColW, headRow2Y).lineTo(tableRight, headRow2Y).stroke();
+  doc.font(boldFont).fontSize(7.5);
+  doc.text("SUBJECT", PAGE_LEFT + 4, headRow2Y + 4, { width: subjectColW - 8 });
+  componentDefs.forEach((c, i) => {
+    const cx = PAGE_LEFT + subjectColW + compColW * i;
+    doc.text(`${c.name}\n(${c.maxMarks})`, cx + 2, headRow2Y + 2, { width: compColW - 4, align: "center" });
+    doc.moveTo(cx, headRow1Y).lineTo(cx, headRow1Y + headH).stroke();
+  });
+  const totalMaxOfComponents = componentDefs.reduce((s, c) => s + c.maxMarks, 0) || 100;
+  doc.moveTo(totalColX, headRow1Y).lineTo(totalColX, headRow1Y + headH).stroke();
+  doc.text(`Total Marks\n(${totalMaxOfComponents})`, totalColX + 2, headRow2Y + 2, { width: totalColW - 4, align: "center" });
+  doc.moveTo(gradeColX, headRow1Y).lineTo(gradeColX, headRow1Y + headH).stroke();
+  doc.text("Grade", gradeColX + 2, headRow2Y + 4, { width: gradeColW - 4, align: "center" });
+
+  let rowY = headRow1Y + headH;
+  doc.font(font).fontSize(8.5);
+  result.subjects.forEach((s) => {
+    const rowH = 16;
+    doc.rect(PAGE_LEFT, rowY, tableRight - PAGE_LEFT, rowH).strokeColor("#999").lineWidth(0.5).stroke();
+    doc.fillColor(black).text(s.subject, PAGE_LEFT + 4, rowY + 4, { width: subjectColW - 8 });
+    if (s.gradeOnly) {
+      componentDefs.forEach((_, i) => {
+        const cx = PAGE_LEFT + subjectColW + compColW * i;
+        doc.text("-", cx, rowY + 4, { width: compColW, align: "center" });
+      });
+      doc.text("-", totalColX, rowY + 4, { width: totalColW, align: "center" });
+      doc.text(s.gradeOnly, gradeColX, rowY + 4, { width: gradeColW, align: "center" });
+    } else {
+      componentDefs.forEach((def, i) => {
+        const cx = PAGE_LEFT + subjectColW + compColW * i;
+        const comp = s.components?.find((c) => c.name === def.name);
+        doc.text(comp ? String(comp.obtained) : "-", cx, rowY + 4, { width: compColW, align: "center" });
+      });
+      doc.text(String(s.marksObtained), totalColX, rowY + 4, { width: totalColW, align: "center" });
+      doc.text(s.grade || "-", gradeColX, rowY + 4, { width: gradeColW, align: "center" });
+    }
+    rowY += rowH;
+  });
+  doc.moveTo(PAGE_LEFT, rowY).lineTo(tableRight, rowY).strokeColor(black).lineWidth(0.8).stroke();
+
+  // --- Overall marks / percentage / grade strip ---------------------------
+  y = rowY + 12;
+  const stripH = 26;
+  const stripColW = PAGE_WIDTH / 3;
+  const stripLabels = [
+    ["Overall Marks", `${result.totalObtained}/${result.totalMax}`],
+    ["Percentage", `${result.percentage}%`],
+    ["Grade", result.overallGrade || "-"],
+  ];
+  doc.rect(PAGE_LEFT, y, PAGE_WIDTH, stripH).strokeColor(black).lineWidth(0.8).stroke();
+  stripLabels.forEach(([label, value], i) => {
+    const x = PAGE_LEFT + stripColW * i;
+    if (i > 0) doc.moveTo(x, y).lineTo(x, y + stripH).stroke();
+    doc.font(boldFont).fontSize(8).text(label, x + 6, y + 5, { width: stripColW - 12 });
+    doc.font(font).fontSize(10).text(value, x + 6, y + 16, { width: stripColW - 12 });
+  });
+  y += stripH + 10;
+
+  // --- Remark / Result lines ------------------------------------------------
+  if (cfg.showRemarks) {
+    doc.font(boldFont).fontSize(9).text("Class Teacher's Remark:  ", PAGE_LEFT, y, { continued: true });
+    doc.font(font).text(result.remarks || "-");
+    y = doc.y + 6;
+  }
+  doc.font(boldFont).fontSize(9).text("Result:  ", PAGE_LEFT, y, { continued: true });
+  doc.font(font).text((result.result || "").toUpperCase());
+  y = doc.y + 30;
+
+  // --- Signatures ------------------------------------------------------------
+  const sigW = PAGE_WIDTH / 3 - 10;
+  const sigY = Math.min(Math.max(y, 680), 760);
+  const sigTriples = [
+    [PAGE_LEFT, "Date"],
+    [PAGE_LEFT + PAGE_WIDTH / 2 - sigW / 2, "Signature of Class Teacher"],
+    [PAGE_RIGHT - sigW, "Signature of Parents"],
+  ];
+  doc.font(font).fontSize(9).fillColor(black);
+  sigTriples.forEach(([x, label]) => {
+    doc.moveTo(x, sigY).lineTo(x + sigW, sigY).strokeColor(black).lineWidth(0.8).stroke();
+    doc.text(label, x, sigY + 4, { width: sigW, align: "center" });
+  });
+
+  // --- Grading legend footer -------------------------------------------------
+  const legend = cfg.gradingLegend || DEFAULT_GRADING_LEGEND;
+  const footerY = sigY + 30;
+  doc.rect(PAGE_LEFT, footerY, PAGE_WIDTH, 34).fillColor(black).fill();
+  doc.fillColor("#fff").font(font).fontSize(6.5)
+    .text(`Note: Grading System: ${legend}`, PAGE_LEFT + 6, footerY + 4, { width: PAGE_WIDTH - 12 });
+}
+
 // GET /api/results/export/pdf?resultId=...
 // Streams a single-page report card PDF for one student's result, laid out
 // with the school's branding and the report-card design Admin selected from
@@ -174,10 +342,9 @@ export const GET = requireRole(["superadmin", "admin", "teacher", "principal"], 
     return Response.json({ error: "resultId is required" }, { status: 400 });
   }
 
-  const result = await Result.findById(resultId).populate(
-    "student",
-    "name rollNumber admissionNumber fatherName className section"
-  );
+  const result = await Result.findById(resultId)
+    .populate("student", "name rollNumber admissionNumber fatherName dob className section")
+    .populate("gradeScale");
   if (!result) {
     return Response.json({ error: "Result not found" }, { status: 404 });
   }
@@ -205,6 +372,14 @@ export const GET = requireRole(["superadmin", "admin", "teacher", "principal"], 
     showRemarks: config?.showRemarks ?? true,
     showCustomNotes: config?.showCustomNotes ?? false,
     customNotes: config?.customNotes || "",
+    // Used only by the Official Marksheet layout's footer legend — built
+    // from this result's own grading scale bands when one is linked, so the
+    // A1/A2/B1... note always matches whatever scale actually graded it.
+    gradingLegend: result.gradeScale?.bands?.length
+      ? result.gradeScale.bands
+          .map((b) => `${b.grade}=${b.remark ? b.remark : ""}(${b.minPercent}%-${b.maxPercent}%)`)
+          .join(", ") + "."
+      : null,
   };
 
   const template = getTemplate(settings?.selectedTemplateId);
@@ -249,61 +424,67 @@ export const GET = requireRole(["superadmin", "admin", "teacher", "principal"], 
   doc.on("data", (c) => chunks.push(c));
   const done = new Promise((resolve) => doc.on("end", resolve));
 
-  // --- Header (varies by template) ---------------------------------------
-  const headerDraw = HEADER_DRAWERS[template.headerStyle] || HEADER_DRAWERS.bordered;
-  const bodyStartY = headerDraw(doc, school, style);
-  doc.y = bodyStartY;
-  doc.fillColor("#000").font(style.font).fontSize(11);
-
-  if (template.showRibbon && (result.rankInClass || result.overallGrade)) {
-    doc.save();
-    doc.rect(PAGE_RIGHT - 110, bodyStartY - 6, 110, 26).fillColor(style.accent).fill();
-    doc.fillColor("#fff").font(style.boldFont).fontSize(10)
-      .text(`Rank ${result.rankInClass || "-"}  |  ${result.overallGrade || "-"}`, PAGE_RIGHT - 106, bodyStartY, { width: 102 });
-    doc.restore();
+  if (template.layout === "marksheet") {
+    // Official Marksheet: fully custom full-page layout, not built from the
+    // generic HEADER_DRAWERS / TABLE_DRAWERS pieces below.
+    drawOfficialMarksheet(doc, { result, school, cfg, attendancePct });
+  } else {
+    // --- Header (varies by template) ---------------------------------------
+    const headerDraw = HEADER_DRAWERS[template.headerStyle] || HEADER_DRAWERS.bordered;
+    const bodyStartY = headerDraw(doc, school, style);
+    doc.y = bodyStartY;
     doc.fillColor("#000").font(style.font).fontSize(11);
-  }
 
-  doc.text(`Student: ${result.student?.name}`);
-  if (result.student?.fatherName) doc.text(`Father's Name: ${result.student.fatherName}`);
-  doc.text(`Class: ${result.className} - ${result.section}`);
-  doc.text(`Roll No: ${result.student?.rollNumber || "-"}`);
-  doc.text(`Admission No: ${result.student?.admissionNumber || "-"}`);
-  doc.text(`Exam: ${result.examName}   Academic Year: ${result.academicYear}`);
-  if (cfg.showOverallAttendance) {
-    doc.text(`Overall Attendance: ${attendancePct != null ? `${attendancePct}%` : "No attendance on record"}`);
-  }
-  doc.moveDown();
+    if (template.showRibbon && (result.rankInClass || result.overallGrade)) {
+      doc.save();
+      doc.rect(PAGE_RIGHT - 110, bodyStartY - 6, 110, 26).fillColor(style.accent).fill();
+      doc.fillColor("#fff").font(style.boldFont).fontSize(10)
+        .text(`Rank ${result.rankInClass || "-"}  |  ${result.overallGrade || "-"}`, PAGE_RIGHT - 106, bodyStartY, { width: 102 });
+      doc.restore();
+      doc.fillColor("#000").font(style.font).fontSize(11);
+    }
 
-  // --- Marks table (varies by template) -----------------------------------
-  const tableDraw = TABLE_DRAWERS[template.tableStyle] || TABLE_DRAWERS.ruled;
-  tableDraw(doc, result.subjects, style);
-
-  doc.moveDown();
-  doc.font(style.boldFont).fillColor(style.accent);
-  doc.text(`Total: ${result.totalObtained} / ${result.totalMax}`);
-  doc.text(`Percentage: ${result.percentage}%`);
-  doc.text(`Overall Grade: ${result.overallGrade}`);
-  if (cfg.showRank) doc.text(`Rank in Class: ${result.rankInClass || "-"}`);
-  doc.text(`Result: ${result.result.toUpperCase()}`);
-  doc.font(style.font).fillColor("#000");
-
-  if (cfg.showRemarks && result.remarks) {
+    doc.text(`Student: ${result.student?.name}`);
+    if (result.student?.fatherName) doc.text(`Father's Name: ${result.student.fatherName}`);
+    doc.text(`Class: ${result.className} - ${result.section}`);
+    doc.text(`Roll No: ${result.student?.rollNumber || "-"}`);
+    doc.text(`Admission No: ${result.student?.admissionNumber || "-"}`);
+    doc.text(`Exam: ${result.examName}   Academic Year: ${result.academicYear}`);
+    if (cfg.showOverallAttendance) {
+      doc.text(`Overall Attendance: ${attendancePct != null ? `${attendancePct}%` : "No attendance on record"}`);
+    }
     doc.moveDown();
-    doc.text(`Remarks: ${result.remarks}`);
-  }
-  if (cfg.showCustomNotes && cfg.customNotes) {
-    doc.moveDown();
-    doc.fontSize(9).fillColor(style.accentSoft).text(cfg.customNotes);
-  }
 
-  if (template.showSignatureBox) {
-    const boxY = 740;
-    doc.fontSize(10).fillColor("#000");
-    doc.moveTo(PAGE_LEFT, boxY).lineTo(PAGE_LEFT + 140, boxY).strokeColor("#000").lineWidth(0.8).stroke();
-    doc.text("Class Teacher", PAGE_LEFT, boxY + 4);
-    doc.moveTo(PAGE_RIGHT - 140, boxY).lineTo(PAGE_RIGHT, boxY).strokeColor("#000").lineWidth(0.8).stroke();
-    doc.text("Principal", PAGE_RIGHT - 140, boxY + 4);
+    // --- Marks table (varies by template) -----------------------------------
+    const tableDraw = TABLE_DRAWERS[template.tableStyle] || TABLE_DRAWERS.ruled;
+    tableDraw(doc, result.subjects, style);
+
+    doc.moveDown();
+    doc.font(style.boldFont).fillColor(style.accent);
+    doc.text(`Total: ${result.totalObtained} / ${result.totalMax}`);
+    doc.text(`Percentage: ${result.percentage}%`);
+    doc.text(`Overall Grade: ${result.overallGrade}`);
+    if (cfg.showRank) doc.text(`Rank in Class: ${result.rankInClass || "-"}`);
+    doc.text(`Result: ${result.result.toUpperCase()}`);
+    doc.font(style.font).fillColor("#000");
+
+    if (cfg.showRemarks && result.remarks) {
+      doc.moveDown();
+      doc.text(`Remarks: ${result.remarks}`);
+    }
+    if (cfg.showCustomNotes && cfg.customNotes) {
+      doc.moveDown();
+      doc.fontSize(9).fillColor(style.accentSoft).text(cfg.customNotes);
+    }
+
+    if (template.showSignatureBox) {
+      const boxY = 740;
+      doc.fontSize(10).fillColor("#000");
+      doc.moveTo(PAGE_LEFT, boxY).lineTo(PAGE_LEFT + 140, boxY).strokeColor("#000").lineWidth(0.8).stroke();
+      doc.text("Class Teacher", PAGE_LEFT, boxY + 4);
+      doc.moveTo(PAGE_RIGHT - 140, boxY).lineTo(PAGE_RIGHT, boxY).strokeColor("#000").lineWidth(0.8).stroke();
+      doc.text("Principal", PAGE_RIGHT - 140, boxY + 4);
+    }
   }
 
   doc.end();

@@ -33,6 +33,56 @@ function TemplatePreview({ t, schoolName, logoUrl }) {
   const totalObtained = SAMPLE.subjects.reduce((s, x) => s + x.written + x.copy, 0);
   const totalMax = SAMPLE.subjects.length * 100;
 
+  if (t.layout === "marksheet") {
+    return (
+      <div className="overflow-hidden rounded-sm border border-navy-100 bg-white p-2 text-[8px] leading-tight text-black">
+        <div className="flex justify-between text-[6.5px]">
+          <span>Contact No. 98XXXXXXXX</span>
+          <span>Affiliation No. XXXXX-XX</span>
+        </div>
+        <p className="mt-1 text-center font-serif text-[11px] font-bold">{schoolName.toUpperCase()}</p>
+        <p className="text-center text-[7px]">CLASS - {SAMPLE.className}</p>
+        <p className="text-center text-[7px] font-bold">Statements of Marks 2025-26</p>
+        <div className="mt-1 border-t border-black pt-1">
+          <p>Student&apos;s Name : {SAMPLE.student}</p>
+          <p>Class : {SAMPLE.className}</p>
+        </div>
+        <table className="mt-1 w-full border border-black text-[6.5px]">
+          <thead>
+            <tr className="border-b border-black">
+              <th className="border-r border-black py-0.5 font-semibold">SUBJECT</th>
+              <th className="border-r border-black py-0.5 font-semibold">Written(80)</th>
+              <th className="border-r border-black py-0.5 font-semibold">Copy(20)</th>
+              <th className="py-0.5 font-semibold">Grade</th>
+            </tr>
+          </thead>
+          <tbody>
+            {SAMPLE.subjects.map((s) => (
+              <tr key={s.name} className="border-b border-navy-100">
+                <td className="border-r border-navy-100 py-0.5 pl-1">{s.name}</td>
+                <td className="border-r border-navy-100 py-0.5 text-center">{s.written}</td>
+                <td className="border-r border-navy-100 py-0.5 text-center">{s.copy}</td>
+                <td className="py-0.5 text-center">{s.grade}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="mt-1 flex justify-between border border-black px-1 py-0.5 font-semibold">
+          <span>Overall {totalObtained}/{totalMax}</span>
+          <span>Result: PASS</span>
+        </div>
+        <div className="mt-1.5 flex justify-between text-[6px]">
+          <span className="border-t border-navy-300 pt-0.5">Date</span>
+          <span className="border-t border-navy-300 pt-0.5">Class Teacher</span>
+          <span className="border-t border-navy-300 pt-0.5">Parent</span>
+        </div>
+        <div className="mt-1 bg-black px-1 py-1 text-[5.5px] text-white">
+          Note: Grading System: A1=Outstanding(91-100%), A2=Excellent(81-90%)…
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="overflow-hidden rounded-sm border border-navy-100 bg-white text-[9px] leading-tight">
       {/* Header */}
