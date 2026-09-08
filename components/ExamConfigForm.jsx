@@ -17,19 +17,42 @@ const blankSubject = () => ({
 
 export default function ExamConfigForm() {
   const [academicYear, setAcademicYear] = useState("2026-27");
-  const [className, setClassName] = useState(CLASS_OPTIONS[3]);
+  // Multiple classes can now be selected together — the same subjects/marks
+  // below get saved to every selected class in one go instead of repeating
+  // this whole form once per class.
+  const [selectedClasses, setSelectedClasses] = useState([CLASS_OPTIONS[3]]);
   const [subjects, setSubjects] = useState([blankSubject()]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
+  // Prefill from the first selected class's existing config (if any), so
+  // editing an already-configured class still works as before.
   useEffect(() => {
-    fetch(`/api/exam-config?academicYear=${academicYear}&className=${encodeURIComponent(className)}`)
+    const primaryClass = selectedClasses[0];
+    if (!primaryClass) {
+      setSubjects([blankSubject()]);
+      return;
+    }
+    fetch(`/api/exam-config?academicYear=${academicYear}&className=${encodeURIComponent(primaryClass)}`)
       .then((r) => r.json())
       .then((d) => {
         const existing = d.examConfigs?.[0];
         setSubjects(existing?.subjects?.length ? existing.subjects : [blankSubject()]);
       });
-  }, [academicYear, className]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [academicYear, selectedClasses[0]]);
+
+  function toggleClass(cls) {
+    setSelectedClasses((prev) =>
+      prev.includes(cls) ? prev.filter((c) => c !== cls) : [...prev, cls]
+    );
+  }
+  function selectAllClasses() {
+    setSelectedClasses(CLASS_OPTIONS);
+  }
+  function clearClasses() {
+    setSelectedClasses([]);
+  }
 
   function updateSubject(i, patch) {
     setSubjects((s) => s.map((sub, idx) => (idx === i ? { ...sub, ...patch } : sub)));
@@ -58,16 +81,24 @@ export default function ExamConfigForm() {
   }
 
   async function save() {
+    if (!selectedClasses.length) {
+      setMessage("Select at least one class.");
+      return;
+    }
     setSaving(true);
     setMessage("");
     try {
       const res = await fetch("/api/exam-config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ academicYear, className, subjects }),
+        body: JSON.stringify({ academicYear, classNames: selectedClasses, subjects }),
       });
       if (!res.ok) throw new Error((await res.json()).error || "Could not save");
-      setMessage("Saved.");
+      setMessage(
+        selectedClasses.length > 1
+          ? `Saved for ${selectedClasses.length} classes.`
+          : "Saved."
+      );
     } catch (err) {
       setMessage(err.message);
     } finally {
@@ -77,14 +108,51 @@ export default function ExamConfigForm() {
 
   return (
     <div className="space-y-4 rounded-sm border border-navy-100 bg-white p-5">
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <input value={academicYear} onChange={(e) => setAcademicYear(e.target.value)}
           placeholder="Academic year e.g. 2026-27"
           className="rounded-sm border border-navy-100 px-3 py-1.5 text-sm" />
-        <select value={className} onChange={(e) => setClassName(e.target.value)}
-          className="rounded-sm border border-navy-100 px-3 py-1.5 text-sm">
-          {CLASS_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
+      </div>
+
+      <div>
+        <div className="mb-1.5 flex items-center justify-between">
+          <label className="text-xs text-navy-400">
+            Classes (same subject/marks will be saved to all selected)
+          </label>
+          <div className="flex gap-2 text-xs">
+            <button type="button" onClick={selectAllClasses} className="text-brass-600 hover:underline">
+              Select all
+            </button>
+            <button type="button" onClick={clearClasses} className="text-navy-400 hover:underline">
+              Clear
+            </button>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 rounded-sm border border-navy-100 p-3">
+          {CLASS_OPTIONS.map((c) => (
+            <label
+              key={c}
+              className={`flex items-center gap-1.5 rounded-sm border px-2.5 py-1 text-xs cursor-pointer ${
+                selectedClasses.includes(c)
+                  ? "border-navy bg-navy text-ivory"
+                  : "border-navy-100 text-navy-600"
+              }`}
+            >
+              <input
+                type="checkbox"
+                className="hidden"
+                checked={selectedClasses.includes(c)}
+                onChange={() => toggleClass(c)}
+              />
+              {c}
+            </label>
+          ))}
+        </div>
+        {selectedClasses.length > 1 && (
+          <p className="mt-1 text-xs text-navy-400">
+            Editing/prefilled from: {selectedClasses[0]} — will overwrite exam config for all {selectedClasses.length} selected classes on save.
+          </p>
+        )}
       </div>
 
       {subjects.map((sub, i) => (
@@ -137,7 +205,11 @@ export default function ExamConfigForm() {
       <div className="flex items-center gap-3">
         <button onClick={save} disabled={saving}
           className="rounded-sm bg-navy px-5 py-2 text-sm text-ivory hover:bg-navy-600 disabled:opacity-50">
-          {saving ? "Saving..." : "Save exam configuration"}
+          {saving
+            ? "Saving..."
+            : selectedClasses.length > 1
+            ? `Save for ${selectedClasses.length} classes`
+            : "Save exam configuration"}
         </button>
         {message && <span className="text-sm text-navy-600">{message}</span>}
       </div>

@@ -14,22 +14,36 @@ export const GET = requireRole(["superadmin", "admin", "teacher"], async (req) =
   return Response.json({ examConfigs: configs });
 });
 
-// POST /api/exam-config  body: { academicYear, className, subjects: [{subject, isNonAcademic, components, gradingOptions}] }
+// POST /api/exam-config  body: { academicYear, className, subjects } OR { academicYear, classNames: [...], subjects }
 // Defines mark distributions per subject (e.g. PA-1: 15, Notebook: 5,
 // Half-Yearly: 80) and custom non-academic grading options (e.g. A+, B+, C+).
+// Passing `classNames` (array) applies the same `subjects` config to every
+// class in the list in one go, so admins don't have to repeat the same
+// subject/marks setup class by class when several classes share it.
 export const POST = requireRole(["superadmin", "admin"], async (req) => {
   try {
-    const { academicYear, className, subjects } = await req.json();
-    if (!academicYear || !className || !Array.isArray(subjects)) {
+    const { academicYear, className, classNames, subjects } = await req.json();
+    const targetClasses = Array.isArray(classNames) && classNames.length ? classNames : (className ? [className] : []);
+
+    if (!academicYear || !targetClasses.length || !Array.isArray(subjects)) {
       return Response.json({ error: "Missing required fields" }, { status: 400 });
     }
     await connectDB();
-    const config = await ExamConfig.findOneAndUpdate(
-      { academicYear, className },
-      { $set: { subjects } },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+
+    const configs = await Promise.all(
+      targetClasses.map((cls) =>
+        ExamConfig.findOneAndUpdate(
+          { academicYear, className: cls },
+          { $set: { subjects } },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        )
+      )
     );
-    return Response.json({ examConfig: config }, { status: 201 });
+
+    return Response.json(
+      { examConfigs: configs, examConfig: configs[0] },
+      { status: 201 }
+    );
   } catch (err) {
     console.error("[exam-config:POST]", err);
     return Response.json({ error: "Could not save exam configuration" }, { status: 500 });
